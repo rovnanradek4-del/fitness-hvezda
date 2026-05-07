@@ -30,11 +30,15 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files (.env.example IS committed, .env.local is not)
+.env*.local
+.env.local
 
 # vercel
 .vercel
+
+# google oauth tokens
+.google-tokens.json
 
 # typescript
 *.tsbuildinfo
