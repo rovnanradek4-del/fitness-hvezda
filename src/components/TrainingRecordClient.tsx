@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Training } from '@/lib/types'
 
@@ -40,6 +40,22 @@ function formatLast(h: { sets: string; reps: string; weight: string }): string {
   return parts.join(' / ')
 }
 
+function buildActuals(plan: Training): Record<string, ActualExercise> {
+  const map: Record<string, ActualExercise> = {}
+  for (const section of plan.sections) {
+    for (const ex of section.exercises) {
+      map[ex.id] = {
+        completed: ex.completed,
+        sets: ex.sets,
+        reps: ex.reps,
+        weight: ex.weight,
+        notes: ex.notes,
+      }
+    }
+  }
+  return map
+}
+
 export default function TrainingRecordClient({
   clientSlug,
   training: plan,
@@ -49,26 +65,31 @@ export default function TrainingRecordClient({
 }: Props) {
   const router = useRouter()
 
-  const [actuals, setActuals] = useState<Record<string, ActualExercise>>(() => {
-    const map: Record<string, ActualExercise> = {}
-    for (const section of plan.sections) {
-      for (const ex of section.exercises) {
-        map[ex.id] = { completed: false, sets: '', reps: '', weight: '', notes: '' }
-      }
-    }
-    return map
-  })
+  // Pre-fill from saved plan values so data is visible on page reload
+  const [actuals, setActuals] = useState<Record<string, ActualExercise>>(() => buildActuals(plan))
 
   const [startTime, setStartTime] = useState(calendarStartTime || plan.startTime || '')
   const [endTime, setEndTime] = useState(calendarEndTime || plan.endTime || '')
-  const [trainerNotes, setTrainerNotes] = useState('')
-  const [progression, setProgression] = useState('')
+  const [trainerNotes, setTrainerNotes] = useState(plan.trainerNotes || '')
+  const [progression, setProgression] = useState(plan.progression || '')
   const [renames, setRenames] = useState<Record<string, string>>({})
   const [skipped, setSkipped] = useState<Set<string>>(new Set())
   const [replaceModal, setReplaceModal] = useState<ReplaceModal | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+
+  // After router.refresh(), the plan prop gets new exercise IDs (uid() is called again
+  // in parseTraining). Re-sync actuals with the new IDs so inputs stay populated.
+  useEffect(() => {
+    setActuals(buildActuals(plan))
+    setRenames({})
+    setSkipped(new Set())
+    setStartTime(calendarStartTime || plan.startTime || '')
+    setEndTime(calendarEndTime || plan.endTime || '')
+    setTrainerNotes(plan.trainerNotes || '')
+    setProgression(plan.progression || '')
+  }, [plan, calendarStartTime, calendarEndTime])
 
   function updateActual(exId: string, field: keyof ActualExercise, value: string | boolean) {
     setActuals((prev) => ({ ...prev, [exId]: { ...prev[exId], [field]: value } }))
@@ -86,8 +107,8 @@ export default function TrainingRecordClient({
       ...plan,
       startTime,
       endTime,
-      trainerNotes: trainerNotes || plan.trainerNotes,
-      progression: progression || plan.progression,
+      trainerNotes,
+      progression,
       sections: plan.sections.map((section) => ({
         ...section,
         exercises: section.exercises
@@ -114,16 +135,21 @@ export default function TrainingRecordClient({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ training: t }),
     })
-    if (!res.ok) throw new Error('Nepodařilo se uložit záznam')
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error || 'Nepodařilo se uložit záznam')
+    }
   }
 
   async function handleSave() {
     setIsSaving(true)
     setError('')
+    setSaved(false)
     try {
       await persistTraining(buildTraining())
       setSaved(true)
-      setTimeout(() => router.refresh(), 500)
+      router.refresh()
+      setTimeout(() => setSaved(false), 2500)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -300,7 +326,7 @@ export default function TrainingRecordClient({
             value={trainerNotes}
             onChange={(e) => setTrainerNotes(e.target.value)}
             rows={3}
-            placeholder={plan.trainerNotes || 'Poznámky pro klienta k tomuto tréninku...'}
+            placeholder="Poznámky pro klienta k tomuto tréninku..."
             className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none placeholder:text-slate-300"
           />
         </div>
@@ -310,23 +336,34 @@ export default function TrainingRecordClient({
             value={progression}
             onChange={(e) => setProgression(e.target.value)}
             rows={2}
-            placeholder={plan.progression || 'Co trénovat příště, jak navázat...'}
+            placeholder="Co trénovat příště, jak navázat..."
             className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none placeholder:text-slate-300"
           />
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{error}</div>
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm flex items-start gap-2">
+          <span className="shrink-0 font-bold">✕</span>
+          <span>{error}</span>
+        </div>
       )}
 
-      <div className="flex justify-end pb-8">
+      <div className="flex items-center justify-between pb-8">
+        {saved ? (
+          <span className="text-green-600 text-sm font-medium flex items-center gap-1.5">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-600 text-xs font-bold">✓</span>
+            Záznam uložen do Supabase
+          </span>
+        ) : (
+          <span />
+        )}
         <button
           onClick={handleSave}
-          disabled={isSaving || saved}
+          disabled={isSaving}
           className="bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white font-semibold px-5 py-2.5 rounded-xl transition-colors text-sm"
         >
-          {saved ? '✓ Uloženo!' : isSaving ? 'Ukládám...' : '💾 Uložit záznam do Obsidianu'}
+          {isSaving ? 'Ukládám...' : '💾 Uložit záznam'}
         </button>
       </div>
 
