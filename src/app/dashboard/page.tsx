@@ -4,33 +4,37 @@ import { getClients, getAllTrainingInfo } from '@/lib/obsidian'
 import { getUpcomingEvents, isCalendarConnected } from '@/lib/calendar'
 import type { CalendarEvent } from '@/lib/types'
 
+const PRAGUE_TZ = 'Europe/Prague'
+
+function pragueDate(d: Date): string {
+  return d.toLocaleDateString('en-CA', { timeZone: PRAGUE_TZ })
+}
+
 function formatEventTime(start: string): string {
   if (!start) return ''
-  if (start.length === 10) {
-    const d = new Date(start + 'T12:00:00')
-    return d.toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'short' })
-  }
-  const d = new Date(start)
+  const allDay = start.length === 10
+  const d = allDay ? new Date(start + 'T12:00:00Z') : new Date(start)
   return d.toLocaleDateString('cs-CZ', {
+    timeZone: PRAGUE_TZ,
     weekday: 'short',
     day: 'numeric',
     month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
+    ...(allDay ? {} : { hour: '2-digit', minute: '2-digit' }),
   })
 }
 
 function isToday(start: string): boolean {
-  const today = new Date().toDateString()
-  const eventDate = new Date(start.length === 10 ? start + 'T12:00:00' : start).toDateString()
+  const today = pragueDate(new Date())
+  const eventDate = start.length === 10 ? start : pragueDate(new Date(start))
   return today === eventDate
 }
 
 function isTomorrow(start: string): boolean {
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)
-  const eventDate = new Date(start.length === 10 ? start + 'T12:00:00' : start).toDateString()
-  return tomorrow.toDateString() === eventDate
+  const tomorrowDate = pragueDate(tomorrow)
+  const eventDate = start.length === 10 ? start : pragueDate(new Date(start))
+  return tomorrowDate === eventDate
 }
 
 type Client = { name: string; slug: string; folder: string; trainingCount: number; lastTraining?: string }

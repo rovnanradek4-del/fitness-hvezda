@@ -106,13 +106,28 @@ export async function getUpcomingEvents(days = 14): Promise<CalendarEvent[]> {
   }
 }
 
+const PRAGUE_TZ = 'Europe/Prague'
+
+function isoToTime(iso?: string | null): string {
+  if (!iso) return ''
+  return new Date(iso).toLocaleTimeString('en-GB', {
+    timeZone: PRAGUE_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
 export async function getTrainingTimeForDate(date: string): Promise<{ startTime: string; endTime: string }> {
   const calendar = await getCalendarClient()
   if (!calendar) return { startTime: '', endTime: '' }
 
   const calendarId = await findCalendarId(calendar)
-  const dayStart = new Date(date + 'T00:00:00')
-  const dayEnd = new Date(date + 'T23:59:59')
+  // Query with a 3-hour buffer on each side so DST shifts (UTC+1/+2) never drop events
+  const dayStart = new Date(date + 'T00:00:00Z')
+  dayStart.setUTCHours(dayStart.getUTCHours() - 3)
+  const dayEnd = new Date(date + 'T23:59:59Z')
+  dayEnd.setUTCHours(dayEnd.getUTCHours() + 3)
 
   try {
     const res = await calendar.events.list({
@@ -125,13 +140,9 @@ export async function getTrainingTimeForDate(date: string): Promise<{ startTime:
     const event = (res.data.items || [])[0]
     if (!event) return { startTime: '', endTime: '' }
 
-    const parseTime = (iso?: string | null) => {
-      if (!iso) return ''
-      return new Date(iso).toTimeString().slice(0, 5)
-    }
     return {
-      startTime: parseTime(event.start?.dateTime),
-      endTime: parseTime(event.end?.dateTime),
+      startTime: isoToTime(event.start?.dateTime),
+      endTime: isoToTime(event.end?.dateTime),
     }
   } catch {
     return { startTime: '', endTime: '' }
