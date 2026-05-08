@@ -1,6 +1,7 @@
 import Nav from '@/components/Nav'
 import Link from 'next/link'
 import { getClients } from '@/lib/obsidian'
+import NewClientButton from '@/components/NewClientButton'
 
 export default async function KlientiPage() {
   const clients = await getClients()
@@ -14,6 +15,7 @@ export default async function KlientiPage() {
             <h1 className="text-2xl font-bold text-slate-900">Klienti</h1>
             <p className="text-slate-500 mt-1">{clients.length} klientů</p>
           </div>
+          <NewClientButton />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

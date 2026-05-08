@@ -56,6 +56,21 @@ export async function getClientBySlug(slug: string) {
   return { name: data.name, slug: data.slug, folder: data.slug }
 }
 
+export async function createClientRecord(name: string): Promise<{ slug: string }> {
+  const slug = slugify(name)
+  if (!slug) throw new Error('Jméno klienta nelze převést na platný identifikátor')
+
+  const { data: existing } = await supabase.from('clients').select('id').eq('slug', slug).single()
+  if (existing) throw new Error(`Klient „${name}" (nebo klient se stejným slugem) již existuje`)
+
+  const { error } = await supabase
+    .from('clients')
+    .insert({ name: name.trim(), slug, profile_markdown: '' })
+
+  if (error) throw new Error(error.message)
+  return { slug }
+}
+
 export async function getClientProfile(folder: string): Promise<string> {
   const { data } = await supabase
     .from('clients')
