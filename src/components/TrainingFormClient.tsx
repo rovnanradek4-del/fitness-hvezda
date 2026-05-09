@@ -40,6 +40,7 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
   const [showAiPanel, setShowAiPanel] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+  const [replacingId, setReplacingId] = useState<string | null>(null)
 
   function updateField<K extends keyof Training>(field: K, value: Training[K]) {
     setTraining((t) => ({ ...t, [field]: value }))
@@ -106,6 +107,25 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
     window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(name + ' exercise')}`, '_blank')
   }
 
+  async function replaceExercise(sectionId: string, ex: { id: string; name: string }, sectionTitle: string) {
+    if (!ex.name.trim() || replacingId) return
+    setReplacingId(ex.id)
+    try {
+      const res = await fetch('/api/ai/nahrad', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exerciseName: ex.name, sectionTitle, clientSlug }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.name) throw new Error(data.error || 'Chyba')
+      updateExercise(sectionId, ex.id, 'name', data.name)
+    } catch {
+      setError('Nepodařilo se vygenerovat náhradu cviku')
+    } finally {
+      setReplacingId(null)
+    }
+  }
+
   async function generateAI() {
     setIsGenerating(true)
     setError('')
@@ -155,7 +175,7 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
   const inputCls =
     'border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-400 bg-white w-full'
 
-  const gridCols = '28px 1fr 52px 52px 64px 1fr 90px 28px 28px'
+  const gridCols = '28px 1fr 52px 52px 64px 1fr 90px 28px 28px 28px'
 
   return (
     <div className="space-y-5">
@@ -201,7 +221,7 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
 
           <div className="p-4 overflow-x-auto">
             <div className="grid gap-1.5 mb-1 min-w-max" style={{ gridTemplateColumns: gridCols }}>
-              {['', 'Exercise', 'Sets', 'Reps', 'Weight', 'Notes', 'Poslední', '', ''].map((h, i) => (
+              {['', 'Exercise', 'Sets', 'Reps', 'Weight', 'Notes', 'Poslední', '', '', ''].map((h, i) => (
                 <div key={i} className="text-xs font-medium text-slate-400 px-1">{h}</div>
               ))}
             </div>
@@ -256,6 +276,16 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
                     className="flex items-center justify-center w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-red-600 text-xs font-bold shrink-0"
                   >
                     ▶
+                  </button>
+                  <button
+                    onClick={() => replaceExercise(section.id, ex, section.title)}
+                    title="Nahradit cvik pomocí AI"
+                    disabled={!ex.name.trim() || replacingId !== null}
+                    className="flex items-center justify-center w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-slate-500 text-xs shrink-0 font-bold"
+                  >
+                    {replacingId === ex.id ? (
+                      <span className="inline-block w-3 h-3 border border-slate-400 border-t-transparent rounded-full animate-spin" />
+                    ) : '⇄'}
                   </button>
                   <button
                     onClick={() => removeExercise(section.id, ex.id)}

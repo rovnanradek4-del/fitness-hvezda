@@ -30,11 +30,19 @@ export default async function NovyTreninkPage({
 
   const exerciseHistory = Object.fromEntries(historyMap)
 
+  function calcDuration(start: string, end: string): string {
+    if (!start || !end) return '60'
+    const [sh, sm] = start.split(':').map(Number)
+    const [eh, em] = end.split(':').map(Number)
+    const mins = eh * 60 + em - (sh * 60 + sm)
+    return mins > 0 ? String(mins) : '60'
+  }
+
   const initialTraining = {
     date: today,
     dayName,
     focus: '',
-    duration: '60',
+    duration: calcDuration(calendarTime.startTime, calendarTime.endTime),
     startTime: calendarTime.startTime,
     endTime: calendarTime.endTime,
     sections: getDefaultSections(),
