@@ -39,12 +39,17 @@ function isTomorrow(start: string): boolean {
 
 type Client = { name: string; slug: string; folder: string; trainingCount: number; lastTraining?: string }
 
+function stripDiacritics(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
 function matchClientToEvent(title: string, clients: Client[]): string | null {
-  const lc = title.toLowerCase()
+  const normTitle = stripDiacritics(title)
   for (const c of clients) {
-    const nameLc = c.name.toLowerCase()
-    const nameParts = nameLc.split(' ').filter(Boolean)
-    if (lc.includes(nameLc) || nameParts.every((w) => lc.includes(w))) {
+    const normName = stripDiacritics(c.name)
+    const parts = normName.split(' ').filter(Boolean)
+    // Match if title contains full name, or contains every word of the name
+    if (normTitle.includes(normName) || parts.every((w) => normTitle.includes(w))) {
       return c.slug
     }
   }

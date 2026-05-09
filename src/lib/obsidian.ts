@@ -56,6 +56,20 @@ export async function getClientBySlug(slug: string) {
   return { name: data.name, slug: data.slug, folder: data.slug }
 }
 
+export async function updateClientProfile(slug: string, profileMarkdown: string): Promise<void> {
+  const { error } = await supabase
+    .from('clients')
+    .update({ profile_markdown: profileMarkdown })
+    .eq('slug', slug)
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteClient(slug: string): Promise<void> {
+  // training_sessions cascade on delete via FK constraint
+  const { error } = await supabase.from('clients').delete().eq('slug', slug)
+  if (error) throw new Error(error.message)
+}
+
 export async function createClientRecord(name: string): Promise<{ slug: string }> {
   const slug = slugify(name)
   if (!slug) throw new Error('Jméno klienta nelze převést na platný identifikátor')

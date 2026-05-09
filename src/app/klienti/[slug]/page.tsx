@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { getClientBySlug, getClientProfile, getClientTrainingDates } from '@/lib/obsidian'
 import { formatCzechDate } from '@/lib/markdown'
 import { notFound } from 'next/navigation'
+import ClientActions from '@/components/ClientActions'
 
 function renderMarkdown(md: string): string {
   return md
@@ -57,12 +58,19 @@ export default async function KlientPage({
               <p className="text-slate-500 mt-0.5">{trainingDates.length} tréninků celkem</p>
             </div>
           </div>
-          <Link
-            href={`/klienti/${slug}/trenink/novy?date=${today}`}
-            className="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-5 py-2.5 rounded-xl transition-colors text-sm"
-          >
-            + Nový trénink
-          </Link>
+          <div className="flex items-center gap-2">
+            <ClientActions
+              slug={slug}
+              clientName={client.name}
+              initialProfile={profileContent}
+            />
+            <Link
+              href={`/klienti/${slug}/trenink/novy?date=${today}`}
+              className="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-5 py-2.5 rounded-xl transition-colors text-sm"
+            >
+              + Nový trénink
+            </Link>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
