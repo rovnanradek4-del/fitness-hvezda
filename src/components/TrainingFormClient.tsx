@@ -42,8 +42,27 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
   const [saved, setSaved] = useState(false)
   const [replacingId, setReplacingId] = useState<string | null>(null)
 
+  function calcDuration(start: string, end: string): string {
+    if (!start || !end) return ''
+    const [sh, sm] = start.split(':').map(Number)
+    const [eh, em] = end.split(':').map(Number)
+    const mins = eh * 60 + em - (sh * 60 + sm)
+    return mins > 0 ? String(mins) : ''
+  }
+
   function updateField<K extends keyof Training>(field: K, value: Training[K]) {
-    setTraining((t) => ({ ...t, [field]: value }))
+    setTraining((t) => {
+      const updated = { ...t, [field]: value }
+      // Auto-recompute duration whenever Od or Do changes
+      if (field === 'startTime' || field === 'endTime') {
+        const computed = calcDuration(
+          field === 'startTime' ? (value as string) : t.startTime,
+          field === 'endTime'   ? (value as string) : t.endTime
+        )
+        if (computed) updated.duration = computed
+      }
+      return updated
+    })
   }
 
   function updateSection(sectionId: string, title: string) {
@@ -137,14 +156,18 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Chyba serveru')
-      setTraining((t) => ({
-        ...t,
-        focus: data.training.focus || t.focus,
-        duration: data.training.duration || t.duration,
-        sections: data.training.sections,
-        trainerNotes: data.training.trainerNotes || t.trainerNotes,
-        progression: data.training.progression || t.progression,
-      }))
+      setTraining((t) => {
+        // Preserve calendar-computed duration; only use AI duration if times aren't set
+        const computed = calcDuration(t.startTime, t.endTime)
+        return {
+          ...t,
+          focus: data.training.focus || t.focus,
+          duration: computed || data.training.duration || t.duration,
+          sections: data.training.sections,
+          trainerNotes: data.training.trainerNotes || t.trainerNotes,
+          progression: data.training.progression || t.progression,
+        }
+      })
       setShowAiPanel(false)
     } catch (e) {
       setError(String(e))
@@ -162,9 +185,11 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ training }),
       })
-      if (!res.ok) throw new Error('Nepodařilo se uložit trénink')
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error || 'Nepodařilo se uložit trénink')
+      }
       setSaved(true)
-      setTimeout(() => router.push(`/klienti/${clientSlug}/trenink/${training.date}`), 800)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -373,7 +398,7 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
         <button onClick={() => router.back()} className="text-sm text-slate-500 hover:text-slate-700 transition-colors">
           ← Zpět
         </button>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
           {!showAiPanel && (
             <button
               onClick={() => setShowAiPanel(true)}
@@ -382,12 +407,24 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
               🤖 Generovat AI
             </button>
           )}
+          {saved && (
+            <button
+              onClick={() => router.push(`/klienti/${clientSlug}/trenink/${training.date}`)}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-5 py-2.5 rounded-xl transition-colors text-sm"
+            >
+              ✅ Uložit záznam z tréninku
+            </button>
+          )}
           <button
             onClick={handleSave}
-            disabled={isSaving || saved}
-            className="bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white font-semibold px-5 py-2.5 rounded-xl transition-colors text-sm"
+            disabled={isSaving}
+            className={`font-semibold px-5 py-2.5 rounded-xl transition-colors text-sm ${
+              saved
+                ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                : 'bg-orange-500 hover:bg-orange-600 text-white'
+            } disabled:opacity-60`}
           >
-            {saved ? '✓ Uloženo!' : isSaving ? 'Ukládám...' : '💾 Uložit záznam do Obsidianu'}
+            {isSaving ? 'Ukládám...' : saved ? '✓ Plán uložen' : '💾 Uložit tréninkový plán'}
           </button>
         </div>
       </div>
