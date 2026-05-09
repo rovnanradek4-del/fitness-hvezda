@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { parseTraining } from './markdown'
+import type { TrainingStatus } from './types'
 
 export function slugify(name: string): string {
   return name
@@ -105,6 +106,22 @@ export async function getClientTrainingDates(folder: string): Promise<string[]> 
   return (data ?? []).map((r) => r.date)
 }
 
+export async function getClientTrainingDatesWithStatus(
+  folder: string
+): Promise<{ date: string; status: TrainingStatus }[]> {
+  const clientId = await getClientId(folder)
+  if (!clientId) return []
+  const { data } = await supabase
+    .from('training_sessions')
+    .select('date, status')
+    .eq('client_id', clientId)
+    .order('date', { ascending: false })
+  return (data ?? []).map((r) => ({
+    date: r.date,
+    status: (r.status ?? 'probehlo') as TrainingStatus,
+  }))
+}
+
 export async function getTrainingMarkdown(folder: string, date: string): Promise<string | null> {
   const clientId = await getClientId(folder)
   if (!clientId) return null
@@ -117,15 +134,45 @@ export async function getTrainingMarkdown(folder: string, date: string): Promise
   return data?.content_markdown ?? null
 }
 
-export async function saveTrainingMarkdown(
+export async function getTrainingStatus(folder: string, date: string): Promise<TrainingStatus> {
+  const clientId = await getClientId(folder)
+  if (!clientId) return 'probehlo'
+  const { data } = await supabase
+    .from('training_sessions')
+    .select('status')
+    .eq('client_id', clientId)
+    .eq('date', date)
+    .single()
+  return (data?.status ?? 'probehlo') as TrainingStatus
+}
+
+export async function updateTrainingStatus(
   folder: string,
   date: string,
-  content: string
+  status: TrainingStatus
 ): Promise<void> {
   const clientId = await getClientId(folder)
   if (!clientId) throw new Error(`Client not found: ${folder}`)
+  const { error } = await supabase
+    .from('training_sessions')
+    .update({ status })
+    .eq('client_id', clientId)
+    .eq('date', date)
+  if (error) throw new Error(error.message)
+}
+
+export async function saveTrainingMarkdown(
+  folder: string,
+  date: string,
+  content: string,
+  status?: TrainingStatus
+): Promise<void> {
+  const clientId = await getClientId(folder)
+  if (!clientId) throw new Error(`Client not found: ${folder}`)
+  const payload: Record<string, unknown> = { client_id: clientId, date, content_markdown: content }
+  if (status) payload.status = status
   const { error } = await supabase.from('training_sessions').upsert(
-    { client_id: clientId, date, content_markdown: content },
+    payload,
     { onConflict: 'client_id,date' }
   )
   if (error) throw new Error(error.message)
@@ -138,15 +185,15 @@ export async function getAllTrainingDates(): Promise<Set<string>> {
   return set
 }
 
-export async function getAllTrainingInfo(): Promise<Map<string, string>> {
+export async function getAllTrainingInfo(): Promise<Map<string, { slug: string; status: TrainingStatus }>> {
   const { data } = await supabase
     .from('training_sessions')
-    .select('date, clients(slug)')
-  const map = new Map<string, string>()
+    .select('date, status, clients(slug)')
+  const map = new Map<string, { slug: string; status: TrainingStatus }>()
   for (const r of data ?? []) {
     const clients = r.clients
     const slug = clients && !Array.isArray(clients) ? (clients as { slug: string }).slug : undefined
-    if (slug) map.set(r.date, slug)
+    if (slug) map.set(r.date, { slug, status: (r.status ?? 'probehlo') as TrainingStatus })
   }
   return map
 }

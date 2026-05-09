@@ -1,3 +1,5 @@
+export type TrainingStatus = 'probehlo' | 'zruseno' | 'prelozeno'
+
 export interface Exercise {
   id: string
   name: string
@@ -25,6 +27,7 @@ export interface Training {
   sections: TrainingSection[]
   trainerNotes: string
   progression: string
+  status?: TrainingStatus
 }
 
 export interface ClientInfo {

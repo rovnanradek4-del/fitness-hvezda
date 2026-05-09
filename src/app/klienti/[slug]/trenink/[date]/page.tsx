@@ -1,7 +1,8 @@
 import Nav from '@/components/Nav'
 import Link from 'next/link'
 import TrainingRecordClient from '@/components/TrainingRecordClient'
-import { getClientBySlug, getTrainingMarkdown, getRecentExerciseHistory } from '@/lib/obsidian'
+import TrainingStatusToggle from '@/components/TrainingStatusToggle'
+import { getClientBySlug, getTrainingMarkdown, getRecentExerciseHistory, getTrainingStatus } from '@/lib/obsidian'
 import { parseTraining, formatCzechDate } from '@/lib/markdown'
 import { getTrainingTimeForDate } from '@/lib/calendar'
 import { notFound } from 'next/navigation'
@@ -19,9 +20,10 @@ export default async function TreninkPage({
   if (!markdown) notFound()
 
   const training = parseTraining(markdown, date)
-  const [calendarTime, historyMap] = await Promise.all([
+  const [calendarTime, historyMap, trainingStatus] = await Promise.all([
     getTrainingTimeForDate(date),
     getRecentExerciseHistory(client.folder, date),
+    getTrainingStatus(client.folder, date),
   ])
   const exerciseHistory = Object.fromEntries(historyMap)
 
@@ -56,6 +58,14 @@ export default async function TreninkPage({
               Upravit plán
             </Link>
           </div>
+        </div>
+
+        <div className="mb-5">
+          <TrainingStatusToggle
+            clientSlug={slug}
+            date={date}
+            initialStatus={trainingStatus}
+          />
         </div>
 
         <div className="flex flex-wrap gap-2 mb-6">

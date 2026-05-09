@@ -2,7 +2,13 @@ import Nav from '@/components/Nav'
 import Link from 'next/link'
 import { getClients, getAllTrainingInfo } from '@/lib/obsidian'
 import { getUpcomingEvents, isCalendarConnected } from '@/lib/calendar'
-import type { CalendarEvent } from '@/lib/types'
+import type { CalendarEvent, TrainingStatus } from '@/lib/types'
+
+const STATUS_BADGE: Record<TrainingStatus, { label: string; cls: string }> = {
+  probehlo:  { label: '✅ Proběhl',  cls: 'bg-green-100 text-green-700' },
+  zruseno:   { label: '❌ Zrušen',   cls: 'bg-red-100 text-red-700' },
+  prelozeno: { label: '⏸ Přeložen', cls: 'bg-amber-100 text-amber-700' },
+}
 
 const PRAGUE_TZ = 'Europe/Prague'
 
@@ -132,8 +138,10 @@ export default async function DashboardPage({
                   const today_ = isToday(event.start)
                   const tomorrow_ = isTomorrow(event.start)
                   const eventDate = event.start.split('T')[0]
-                  const planClientSlug = trainingInfo.get(eventDate)
-                  const hasPlan = !!planClientSlug
+                  const planInfo = trainingInfo.get(eventDate)
+                  const hasPlan = !!planInfo
+                  const planClientSlug = planInfo?.slug
+                  const trainingStatus = planInfo?.status
                   const matchedSlug = !hasPlan ? matchClientToEvent(event.title, clients) : null
 
                   const href = hasPlan
@@ -164,9 +172,16 @@ export default async function DashboardPage({
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         {hasPlan ? (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
-                            ✓ Plán
-                          </span>
+                          <>
+                            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">
+                              ✓ Plán
+                            </span>
+                            {trainingStatus && trainingStatus !== 'probehlo' && (
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[trainingStatus].cls}`}>
+                                {STATUS_BADGE[trainingStatus].label}
+                              </span>
+                            )}
+                          </>
                         ) : (
                           <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-medium">
                             Bez plánu

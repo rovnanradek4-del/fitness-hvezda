@@ -1,9 +1,16 @@
 import Nav from '@/components/Nav'
 import Link from 'next/link'
-import { getClientBySlug, getClientProfile, getClientTrainingDates } from '@/lib/obsidian'
+import { getClientBySlug, getClientProfile, getClientTrainingDatesWithStatus } from '@/lib/obsidian'
+import type { TrainingStatus } from '@/lib/types'
 import { formatCzechDate } from '@/lib/markdown'
 import { notFound } from 'next/navigation'
 import ClientActions from '@/components/ClientActions'
+
+const STATUS_BADGE: Record<TrainingStatus, { label: string; cls: string }> = {
+  probehlo: { label: '✅ Proběhl', cls: 'bg-green-100 text-green-700' },
+  zruseno:  { label: '❌ Zrušen',  cls: 'bg-red-100 text-red-700' },
+  prelozeno: { label: '⏸ Přeložen', cls: 'bg-amber-100 text-amber-700' },
+}
 
 function renderMarkdown(md: string): string {
   return md
@@ -38,7 +45,7 @@ export default async function KlientPage({
 
   const [profileContent, trainingDates] = await Promise.all([
     getClientProfile(client.folder),
-    getClientTrainingDates(client.folder),
+    getClientTrainingDatesWithStatus(client.folder),
   ])
 
   const today = new Date().toISOString().split('T')[0]
@@ -56,6 +63,17 @@ export default async function KlientPage({
             <div>
               <h1 className="text-2xl font-bold text-slate-900">{client.name}</h1>
               <p className="text-slate-500 mt-0.5">{trainingDates.length} tréninků celkem</p>
+              {trainingDates.length > 0 && (() => {
+                const done = trainingDates.filter(t => t.status === 'probehlo').length
+                const cancelled = trainingDates.filter(t => t.status === 'zruseno').length
+                return (
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {done > 0 && <span className="text-green-600 font-medium">{done} proběhlo</span>}
+                    {done > 0 && cancelled > 0 && <span className="mx-1">·</span>}
+                    {cancelled > 0 && <span className="text-red-500 font-medium">{cancelled} zrušeno</span>}
+                  </p>
+                )
+              })()}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -95,21 +113,29 @@ export default async function KlientPage({
                 <p className="text-slate-400 text-sm">Žádné tréninky zatím</p>
               ) : (
                 <div className="space-y-2">
-                  {trainingDates.map((date) => (
-                    <Link
-                      key={date}
-                      href={`/klienti/${slug}/trenink/${date}`}
-                      className="flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-all group"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-slate-800 group-hover:text-blue-600 transition-colors">
-                          {date}
-                        </p>
-                        <p className="text-xs text-slate-400">{formatCzechDate(date)}</p>
-                      </div>
-                      <span className="text-slate-300 group-hover:text-blue-400 transition-colors text-sm">→</span>
-                    </Link>
-                  ))}
+                  {trainingDates.map(({ date, status }) => {
+                    const badge = STATUS_BADGE[status]
+                    return (
+                      <Link
+                        key={date}
+                        href={`/klienti/${slug}/trenink/${date}`}
+                        className="flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-all group"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-slate-800 group-hover:text-blue-600 transition-colors">
+                            {date}
+                          </p>
+                          <p className="text-xs text-slate-400">{formatCzechDate(date)}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>
+                            {badge.label}
+                          </span>
+                          <span className="text-slate-300 group-hover:text-blue-400 transition-colors text-sm">→</span>
+                        </div>
+                      </Link>
+                    )
+                  })}
                 </div>
               )}
             </div>
