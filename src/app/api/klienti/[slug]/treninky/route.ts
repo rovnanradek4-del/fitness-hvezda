@@ -26,8 +26,9 @@ export async function POST(
   try {
     const { training }: { training: Training } = await request.json()
     if (!training?.date) return Response.json({ error: 'Chybí datum tréninku' }, { status: 400 })
+    console.log('[POST /treninky] slug:', slug, 'client.id:', client.id, 'date:', training.date)
     const markdown = generateTrainingMarkdown(training)
-    await saveTrainingMarkdown(client.folder, training.date, markdown, training.status)
+    await saveTrainingMarkdown(client.id, training.date, markdown, training.status)
     return Response.json({ ok: true, date: training.date })
   } catch (e) {
     console.error('[POST /treninky]', e)
@@ -49,7 +50,7 @@ export async function PATCH(
     if (!date) return Response.json({ error: 'Chybí datum' }, { status: 400 })
     const allowed: TrainingStatus[] = ['probehlo', 'zruseno', 'prelozeno']
     if (!allowed.includes(status)) return Response.json({ error: 'Neplatný status' }, { status: 400 })
-    await updateTrainingStatus(client.folder, date, status)
+    await updateTrainingStatus(client.id, date, status)
     return Response.json({ ok: true })
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)

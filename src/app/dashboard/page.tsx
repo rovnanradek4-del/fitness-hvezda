@@ -138,11 +138,12 @@ export default async function DashboardPage({
                   const today_ = isToday(event.start)
                   const tomorrow_ = isTomorrow(event.start)
                   const eventDate = event.start.split('T')[0]
-                  const planInfo = trainingInfo.get(eventDate)
+                  // Always match by client name first, then look up by date:slug key
+                  const matchedSlug = matchClientToEvent(event.title, clients)
+                  const planInfo = matchedSlug ? trainingInfo.get(`${eventDate}:${matchedSlug}`) : undefined
                   const hasPlan = !!planInfo
                   const planClientSlug = planInfo?.slug
                   const trainingStatus = planInfo?.status
-                  const matchedSlug = !hasPlan ? matchClientToEvent(event.title, clients) : null
 
                   const href = hasPlan
                     ? `/klienti/${planClientSlug}/trenink/${eventDate}`

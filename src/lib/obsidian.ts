@@ -54,7 +54,7 @@ export async function getClients() {
 export async function getClientBySlug(slug: string) {
   const { data } = await supabase.from('clients').select('id, name, slug').eq('slug', slug).single()
   if (!data) return null
-  return { name: data.name, slug: data.slug, folder: data.slug }
+  return { id: data.id as string, name: data.name, slug: data.slug, folder: data.slug }
 }
 
 export async function updateClientProfile(slug: string, profileMarkdown: string): Promise<void> {
@@ -147,12 +147,10 @@ export async function getTrainingStatus(folder: string, date: string): Promise<T
 }
 
 export async function updateTrainingStatus(
-  folder: string,
+  clientId: string,
   date: string,
   status: TrainingStatus
 ): Promise<void> {
-  const clientId = await getClientId(folder)
-  if (!clientId) throw new Error(`Client not found: ${folder}`)
   const { error } = await supabase
     .from('training_sessions')
     .update({ status })
@@ -162,13 +160,12 @@ export async function updateTrainingStatus(
 }
 
 export async function saveTrainingMarkdown(
-  folder: string,
+  clientId: string,
   date: string,
   content: string,
   status?: TrainingStatus
 ): Promise<void> {
-  const clientId = await getClientId(folder)
-  if (!clientId) throw new Error(`Client not found: ${folder}`)
+  console.log('[saveTrainingMarkdown] clientId:', clientId, 'date:', date)
   const payload: Record<string, unknown> = { client_id: clientId, date, content_markdown: content }
   if (status) payload.status = status
   const { error } = await supabase.from('training_sessions').upsert(
@@ -185,6 +182,7 @@ export async function getAllTrainingDates(): Promise<Set<string>> {
   return set
 }
 
+// Key format: `${date}:${slug}` — avoids collision when multiple clients train same day
 export async function getAllTrainingInfo(): Promise<Map<string, { slug: string; status: TrainingStatus }>> {
   const { data } = await supabase
     .from('training_sessions')
@@ -193,7 +191,7 @@ export async function getAllTrainingInfo(): Promise<Map<string, { slug: string; 
   for (const r of data ?? []) {
     const clients = r.clients
     const slug = clients && !Array.isArray(clients) ? (clients as { slug: string }).slug : undefined
-    if (slug) map.set(r.date, { slug, status: (r.status ?? 'probehlo') as TrainingStatus })
+    if (slug) map.set(`${r.date}:${slug}`, { slug, status: (r.status ?? 'probehlo') as TrainingStatus })
   }
   return map
 }
