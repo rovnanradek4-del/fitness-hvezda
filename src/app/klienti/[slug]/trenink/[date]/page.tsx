@@ -2,6 +2,7 @@ import Nav from '@/components/Nav'
 import Link from 'next/link'
 import TrainingRecordClient from '@/components/TrainingRecordClient'
 import TrainingStatusToggle from '@/components/TrainingStatusToggle'
+import RegeneratePlanButton from '@/components/RegeneratePlanButton'
 import { getClientBySlug, getTrainingMarkdown, getRecentExerciseHistory, getTrainingStatus } from '@/lib/obsidian'
 import { parseTraining, formatCzechDate } from '@/lib/markdown'
 import { getTrainingTimeForDate } from '@/lib/calendar'
@@ -43,7 +44,7 @@ export default async function TreninkPage({
               <p className="text-slate-500 mt-1">{training.focus}</p>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link
               href={`/klienti/${slug}/trenink/${date}/tisk`}
               target="_blank"
@@ -51,6 +52,12 @@ export default async function TreninkPage({
             >
               Tisk / PDF
             </Link>
+            <RegeneratePlanButton
+              clientSlug={slug}
+              clientName={client.name}
+              date={date}
+              currentDuration={training.duration || '60'}
+            />
             <Link
               href={`/klienti/${slug}/trenink/novy?date=${date}`}
               className="text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium px-4 py-2 rounded-xl transition-colors"
