@@ -175,6 +175,27 @@ export async function saveTrainingMarkdown(
   if (error) throw new Error(error.message)
 }
 
+export async function getTrainingStats(): Promise<{ thisWeek: number; thisMonth: number; total: number }> {
+  const now = new Date()
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const day = now.getDay() === 0 ? 6 : now.getDay() - 1 // Mon=0
+  const weekStartDate = new Date(now)
+  weekStartDate.setDate(now.getDate() - day)
+  const weekStart = weekStartDate.toISOString().split('T')[0]
+  const today = now.toISOString().split('T')[0]
+
+  const [weekRes, monthRes, totalRes] = await Promise.all([
+    supabase.from('training_sessions').select('id', { count: 'exact', head: true }).gte('date', weekStart).lte('date', today).eq('status', 'probehlo'),
+    supabase.from('training_sessions').select('id', { count: 'exact', head: true }).gte('date', monthStart).lte('date', today).eq('status', 'probehlo'),
+    supabase.from('training_sessions').select('id', { count: 'exact', head: true }).eq('status', 'probehlo'),
+  ])
+  return {
+    thisWeek: weekRes.count ?? 0,
+    thisMonth: monthRes.count ?? 0,
+    total: totalRes.count ?? 0,
+  }
+}
+
 export async function getAllTrainingDates(): Promise<Set<string>> {
   const { data } = await supabase.from('training_sessions').select('date')
   const set = new Set<string>()

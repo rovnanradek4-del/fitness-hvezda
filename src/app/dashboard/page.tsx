@@ -1,6 +1,6 @@
 import Nav from '@/components/Nav'
 import Link from 'next/link'
-import { getClients, getAllTrainingInfo } from '@/lib/obsidian'
+import { getClients, getAllTrainingInfo, getTrainingStats } from '@/lib/obsidian'
 import { getUpcomingEvents, isCalendarConnected } from '@/lib/calendar'
 import type { CalendarEvent, TrainingStatus } from '@/lib/types'
 
@@ -68,11 +68,12 @@ export default async function DashboardPage({
   searchParams: Promise<{ calendar?: string }>
 }) {
   const { calendar } = await searchParams
-  const [clients, connected, events, trainingInfo] = await Promise.all([
+  const [clients, connected, events, trainingInfo, stats] = await Promise.all([
     getClients(),
     isCalendarConnected(),
     isCalendarConnected().then((c) => (c ? getUpcomingEvents(14) : [])),
     getAllTrainingInfo(),
+    getTrainingStats(),
   ])
 
   const today = new Date().toLocaleDateString('cs-CZ', {
@@ -83,25 +84,45 @@ export default async function DashboardPage({
   })
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 pb-20 lg:pb-0">
       <Nav />
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-6 lg:py-8">
         {calendar === 'connected' && (
-          <div className="mb-6 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-xl text-sm">
+          <div className="mb-5 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-xl text-sm">
             Google Calendar byl úspěšně propojen.
           </div>
         )}
 
-        <div className="mb-8">
+        {/* Header */}
+        <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-          <p className="text-slate-500 mt-1 capitalize">{today}</p>
+          <p className="text-slate-500 mt-0.5 capitalize text-sm">{today}</p>
+        </div>
+
+        {/* Stats cards */}
+        <div className="grid grid-cols-3 gap-3 mb-8">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Klienti</p>
+            <p className="text-3xl font-bold text-slate-900">{clients.length}</p>
+            <Link href="/klienti" className="text-xs text-blue-500 hover:text-blue-600 mt-1 inline-block">Zobrazit →</Link>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Tento týden</p>
+            <p className="text-3xl font-bold text-slate-900">{stats.thisWeek}</p>
+            <p className="text-xs text-slate-400 mt-1">tréninků proběhlo</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Tento měsíc</p>
+            <p className="text-3xl font-bold text-slate-900">{stats.thisMonth}</p>
+            <p className="text-xs text-slate-400 mt-1">tréninků proběhlo</p>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Calendar column */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-800">Nadcházející tréninky</h2>
+              <h2 className="text-base font-semibold text-slate-800">Nadcházející tréninky</h2>
               {!connected && (
                 <a
                   href="/api/auth/google"
@@ -133,12 +154,11 @@ export default async function DashboardPage({
                 <p className="text-slate-400 text-sm mt-1">Příštích 14 dní je volných</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {(events as CalendarEvent[]).map((event) => {
                   const today_ = isToday(event.start)
                   const tomorrow_ = isTomorrow(event.start)
                   const eventDate = event.start.split('T')[0]
-                  // Always match by client name first, then look up by date:slug key
                   const matchedSlug = matchClientToEvent(event.title, clients)
                   const planInfo = matchedSlug ? trainingInfo.get(`${eventDate}:${matchedSlug}`) : undefined
                   const hasPlan = !!planInfo
@@ -155,26 +175,35 @@ export default async function DashboardPage({
                     <Link
                       key={event.id}
                       href={href}
-                      className={`block bg-white rounded-xl border shadow-sm p-4 flex items-start gap-3 hover:shadow-md transition-all ${
-                        today_ ? 'border-orange-200 bg-orange-50 hover:border-orange-300' : 'border-slate-100 hover:border-blue-200'
+                      className={`flex items-center gap-3 rounded-xl border px-4 py-3 hover:shadow-md transition-all ${
+                        today_
+                          ? 'border-orange-200 bg-orange-50 hover:border-orange-300'
+                          : 'bg-white border-slate-100 hover:border-blue-200'
                       }`}
                     >
                       <div
-                        className={`w-1.5 self-stretch rounded-full mt-0.5 shrink-0 ${
+                        className={`w-1 self-stretch rounded-full shrink-0 ${
                           today_ ? 'bg-orange-400' : tomorrow_ ? 'bg-blue-400' : 'bg-slate-200'
                         }`}
                       />
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-slate-900 text-sm truncate">{event.title}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">{formatEventTime(event.start)}</p>
-                        {event.location && (
-                          <p className="text-xs text-slate-400 mt-0.5 truncate">{event.location}</p>
-                        )}
+                        <p className="text-xs text-slate-400 mt-0.5">{formatEventTime(event.start)}</p>
                       </div>
-                      <div className="flex flex-col items-end gap-1 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                        {today_ && (
+                          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">
+                            Dnes
+                          </span>
+                        )}
+                        {tomorrow_ && (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                            Zítra
+                          </span>
+                        )}
                         {hasPlan ? (
                           <>
-                            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">
+                            <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
                               ✓ Plán
                             </span>
                             {trainingStatus && trainingStatus !== 'probehlo' && (
@@ -188,16 +217,6 @@ export default async function DashboardPage({
                             Bez plánu
                           </span>
                         )}
-                        {today_ && (
-                          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">
-                            Dnes
-                          </span>
-                        )}
-                        {tomorrow_ && (
-                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
-                            Zítra
-                          </span>
-                        )}
                       </div>
                     </Link>
                   )
@@ -208,34 +227,33 @@ export default async function DashboardPage({
 
           {/* Clients column */}
           <div>
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">Klienti</h2>
-            <div className="space-y-3">
+            <h2 className="text-base font-semibold text-slate-800 mb-3">Klienti</h2>
+            <div className="space-y-2">
               {clients.map((client) => (
                 <Link
                   key={client.slug}
                   href={`/klienti/${client.slug}`}
-                  className="block bg-white rounded-xl border border-slate-100 shadow-sm p-4 hover:border-blue-200 hover:shadow-md transition-all group"
+                  className="flex items-center gap-3 bg-white rounded-xl border border-slate-100 px-4 py-3 hover:border-blue-200 hover:shadow-md transition-all group"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white font-semibold text-sm shrink-0">
-                      {client.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-900 text-sm group-hover:text-blue-600 transition-colors">
-                        {client.name}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {client.trainingCount} tréninků
-                        {client.lastTraining && ` · poslední ${client.lastTraining}`}
-                      </p>
-                    </div>
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white font-semibold text-xs shrink-0">
+                    {client.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-slate-900 text-sm group-hover:text-blue-600 transition-colors truncate">
+                      {client.name}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {client.trainingCount} tréninků
+                      {client.lastTraining && ` · ${client.lastTraining}`}
+                    </p>
+                  </div>
+                  <span className="text-slate-300 group-hover:text-blue-400 transition-colors text-sm shrink-0">→</span>
                 </Link>
               ))}
 
               <Link
                 href="/klienti"
-                className="block text-center text-sm text-blue-600 hover:text-blue-700 py-2"
+                className="block text-center text-sm text-blue-600 hover:text-blue-700 py-2 font-medium"
               >
                 Všichni klienti →
               </Link>

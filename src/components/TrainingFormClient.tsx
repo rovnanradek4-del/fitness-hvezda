@@ -152,7 +152,7 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
       const res = await fetch('/api/ai/generuj', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientSlug, trainingDate: training.date, customPrompt: aiPrompt }),
+        body: JSON.stringify({ clientSlug, trainingDate: training.date, customPrompt: aiPrompt, duration: training.duration }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Chyba serveru')
@@ -197,6 +197,15 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
     }
   }
 
+  const SECTION_COLORS = [
+    { bg: 'bg-blue-50',    header: 'bg-blue-100',   border: 'border-blue-200',   text: 'text-blue-800'   },
+    { bg: 'bg-emerald-50', header: 'bg-emerald-100', border: 'border-emerald-200', text: 'text-emerald-800' },
+    { bg: 'bg-violet-50',  header: 'bg-violet-100',  border: 'border-violet-200',  text: 'text-violet-800'  },
+    { bg: 'bg-amber-50',   header: 'bg-amber-100',   border: 'border-amber-200',   text: 'text-amber-800'   },
+    { bg: 'bg-rose-50',    header: 'bg-rose-100',    border: 'border-rose-200',    text: 'text-rose-800'    },
+    { bg: 'bg-cyan-50',    header: 'bg-cyan-100',    border: 'border-cyan-200',    text: 'text-cyan-800'    },
+  ]
+
   const inputCls =
     'border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-400 bg-white w-full'
 
@@ -231,17 +240,19 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
       </div>
 
       {/* Sections */}
-      {training.sections.map((section) => (
-        <div key={section.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50">
+      {training.sections.map((section, sIdx) => {
+        const color = SECTION_COLORS[sIdx % SECTION_COLORS.length]
+        return (
+        <div key={section.id} className={`rounded-2xl border ${color.border} shadow-sm overflow-hidden`}>
+          <div className={`flex items-center justify-between px-5 py-3 border-b ${color.border} ${color.header}`}>
             <input
               type="text"
               value={section.title}
               onChange={(e) => updateSection(section.id, e.target.value)}
-              className="font-semibold text-slate-800 bg-transparent border-none outline-none focus:ring-0 text-sm w-full"
+              className={`font-semibold bg-transparent border-none outline-none focus:ring-0 text-sm w-full ${color.text}`}
               placeholder="Název sekce..."
             />
-            <button onClick={() => removeSection(section.id)} className="text-slate-300 hover:text-red-500 transition-colors ml-3 text-sm shrink-0" title="Odstranit sekci">✕</button>
+            <button onClick={() => removeSection(section.id)} className="text-slate-400 hover:text-red-500 transition-colors ml-3 text-sm shrink-0" title="Odstranit sekci">✕</button>
           </div>
 
           <div className="p-4 overflow-x-auto">
@@ -327,7 +338,8 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
             </button>
           </div>
         </div>
-      ))}
+        )
+      })}
 
       <button
         onClick={addSection}
