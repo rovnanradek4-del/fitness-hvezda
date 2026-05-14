@@ -14,13 +14,13 @@ interface ActualExercise {
   notes: string
 }
 
-interface ReplaceModal {
-  exerciseId: string
-  exerciseName: string
+type ReplacePanel = {
+  sectionId: string
+  exId: string
+  exName: string
   sectionTitle: string
-  stage: 'menu' | 'loading' | 'result'
-  suggestion: string
-  reason: string
+  suggestions: { name: string; reason: string }[]
+  loading: boolean
 }
 
 interface Props {
@@ -74,7 +74,7 @@ export default function TrainingRecordClient({
   const [progression, setProgression] = useState(plan.progression || '')
   const [renames, setRenames] = useState<Record<string, string>>({})
   const [skipped, setSkipped] = useState<Set<string>>(new Set())
-  const [replaceModal, setReplaceModal] = useState<ReplaceModal | null>(null)
+  const [replacePanel, setReplacePanel] = useState<ReplacePanel | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -157,33 +157,32 @@ export default function TrainingRecordClient({
     }
   }
 
-  async function callAiReplacement() {
-    if (!replaceModal) return
-    setReplaceModal((m) => m ? { ...m, stage: 'loading' } : m)
+  async function fetchAlternatives(panel: Omit<ReplacePanel, 'suggestions' | 'loading'>) {
+    setReplacePanel({ ...panel, suggestions: [], loading: true })
     try {
       const res = await fetch('/api/ai/nahrad', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          exerciseName: replaceModal.exerciseName,
-          sectionTitle: replaceModal.sectionTitle,
-          clientSlug,
-        }),
+        body: JSON.stringify({ exerciseName: panel.exName, sectionTitle: panel.sectionTitle, clientSlug }),
       })
       const data = await res.json()
-      if (!res.ok || !data.name) throw new Error(data.error || 'Chyba')
-      setReplaceModal((m) => m ? { ...m, stage: 'result', suggestion: data.name, reason: data.reason || '' } : m)
+      if (!res.ok || !data.suggestions) throw new Error(data.error || 'Chyba')
+      setReplacePanel((p) => p ? { ...p, suggestions: data.suggestions, loading: false } : p)
     } catch {
-      setReplaceModal((m) => m ? { ...m, stage: 'menu' } : m)
-      setError('Nepodařilo se vygenerovat náhradu')
+      setError('Nepodařilo se načíst alternativy')
+      setReplacePanel(null)
     }
   }
 
-  async function acceptReplacement() {
-    if (!replaceModal) return
-    const newRenames = { ...renames, [replaceModal.exerciseId]: replaceModal.suggestion }
+  function openReplacePanel(sectionId: string, exId: string, exName: string, sectionTitle: string) {
+    if (replacePanel?.exId === exId) { setReplacePanel(null); return }
+    fetchAlternatives({ sectionId, exId, exName, sectionTitle })
+  }
+
+  async function selectAlternative(exId: string, name: string) {
+    const newRenames = { ...renames, [exId]: name }
     setRenames(newRenames)
-    setReplaceModal(null)
+    setReplacePanel(null)
     try {
       await persistTraining(buildTraining({ renames: newRenames }))
     } catch (e) {
@@ -191,12 +190,11 @@ export default function TrainingRecordClient({
     }
   }
 
-  async function skipExercise() {
-    if (!replaceModal) return
+  async function skipExercise(exId: string) {
     const newSkipped = new Set(skipped)
-    newSkipped.add(replaceModal.exerciseId)
+    newSkipped.add(exId)
     setSkipped(newSkipped)
-    setReplaceModal(null)
+    setReplacePanel(null)
     try {
       await persistTraining(buildTraining({ skipped: newSkipped }))
     } catch (e) {
@@ -314,9 +312,14 @@ export default function TrainingRecordClient({
                       ▶
                     </button>
                     <button
-                      onClick={() => setReplaceModal({ exerciseId: ex.id, exerciseName: displayName, sectionTitle: section.title, stage: 'menu', suggestion: '', reason: '' })}
-                      title="Vyměnit cvik"
-                      className="flex items-center justify-center w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors text-slate-500 text-xs shrink-0 font-bold"
+                      onClick={() => openReplacePanel(section.id, ex.id, displayName, section.title)}
+                      title="Alternativy pomocí AI"
+                      disabled={isSkipped}
+                      className={`flex items-center justify-center w-7 h-7 rounded-lg disabled:opacity-30 transition-colors text-xs shrink-0 font-bold ${
+                        replacePanel?.exId === ex.id
+                          ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-500'
+                      }`}
                     >
                       ⇄
                     </button>
@@ -324,6 +327,63 @@ export default function TrainingRecordClient({
                 )
               })}
             </div>
+
+            {/* Inline replace panel */}
+            {replacePanel?.sectionId === section.id && (
+              <div className="px-4 pb-4">
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
+                      Alternativy pro „{replacePanel.exName}"
+                    </p>
+                    <div className="flex items-center gap-3">
+                      {!replacePanel.loading && (
+                        <>
+                          <button
+                            onClick={() => fetchAlternatives({ sectionId: replacePanel.sectionId, exId: replacePanel.exId, exName: replacePanel.exName, sectionTitle: replacePanel.sectionTitle })}
+                            className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            🔄 Dalších 5
+                          </button>
+                          <button
+                            onClick={() => skipExercise(replacePanel.exId)}
+                            className="text-xs text-slate-400 hover:text-slate-600 font-medium"
+                          >
+                            ⊘ Vynechat
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => setReplacePanel(null)}
+                        className="text-xs text-slate-400 hover:text-slate-600"
+                      >
+                        Zrušit
+                      </button>
+                    </div>
+                  </div>
+
+                  {replacePanel.loading ? (
+                    <div className="flex items-center gap-2 py-3 text-sm text-blue-500">
+                      <span className="w-4 h-4 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin shrink-0" />
+                      Hledám alternativy…
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                      {replacePanel.suggestions.map((s, i) => (
+                        <button
+                          key={i}
+                          onClick={() => selectAlternative(replacePanel.exId, s.name)}
+                          className="text-left bg-white border border-blue-100 hover:border-blue-400 hover:shadow-sm rounded-lg p-2.5 transition-all group"
+                        >
+                          <p className="text-sm font-semibold text-slate-800 group-hover:text-blue-700 leading-tight">{s.name}</p>
+                          {s.reason && <p className="text-xs text-slate-400 mt-1 leading-tight">{s.reason}</p>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )
       })}
@@ -377,77 +437,6 @@ export default function TrainingRecordClient({
         </button>
       </div>
 
-      {/* Replace modal */}
-      {replaceModal && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={() => setReplaceModal(null)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="font-semibold text-slate-900 mb-0.5">Vyměnit cvik</h3>
-            <p className="text-sm text-slate-500 mb-5">{replaceModal.exerciseName}</p>
-
-            {replaceModal.stage === 'menu' && (
-              <div className="space-y-3">
-                <button
-                  onClick={callAiReplacement}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3 text-sm font-semibold transition-colors"
-                >
-                  🤖 Vygenerovat náhradu pomocí AI
-                </button>
-                <button
-                  onClick={skipExercise}
-                  className="w-full border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl py-3 text-sm font-medium transition-colors"
-                >
-                  ⊘ Vynechat cvik
-                </button>
-              </div>
-            )}
-
-            {replaceModal.stage === 'loading' && (
-              <div className="text-center py-6">
-                <div className="inline-block w-8 h-8 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-3" />
-                <p className="text-sm text-slate-500">AI hledá náhradu...</p>
-              </div>
-            )}
-
-            {replaceModal.stage === 'result' && (
-              <div className="space-y-4">
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                  <p className="font-semibold text-slate-800">{replaceModal.suggestion}</p>
-                  {replaceModal.reason && (
-                    <p className="text-xs text-slate-500 mt-1">{replaceModal.reason}</p>
-                  )}
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    onClick={acceptReplacement}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl py-2.5 text-sm font-semibold transition-colors"
-                  >
-                    ✓ Přijmout
-                  </button>
-                  <button
-                    onClick={callAiReplacement}
-                    className="text-sm text-blue-600 hover:text-blue-700 px-3 font-medium"
-                  >
-                    Zkusit znovu
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={() => setReplaceModal(null)}
-              className="mt-4 text-sm text-slate-400 hover:text-slate-600 w-full text-center transition-colors"
-            >
-              Zrušit
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

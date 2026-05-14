@@ -1,10 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Training, TrainingSection, Exercise } from '@/lib/types'
 
 type ExerciseHistory = Record<string, { sets: string; reps: string; weight: string }>
+
+type ReplacePanel = {
+  sectionId: string
+  exId: string
+  exName: string
+  sectionTitle: string
+  suggestions: { name: string; reason: string }[]
+  loading: boolean
+}
 
 function uid() {
   return Math.random().toString(36).slice(2, 9)
@@ -40,7 +49,7 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
   const [showAiPanel, setShowAiPanel] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
-  const [replacingId, setReplacingId] = useState<string | null>(null)
+  const [replacePanel, setReplacePanel] = useState<ReplacePanel | null>(null)
 
   function calcDuration(start: string, end: string): string {
     if (!start || !end) return ''
@@ -126,23 +135,32 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
     window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(name + ' exercise')}`, '_blank')
   }
 
-  async function replaceExercise(sectionId: string, ex: { id: string; name: string }, sectionTitle: string) {
-    if (!ex.name.trim() || replacingId) return
-    setReplacingId(ex.id)
+  async function fetchAlternatives(panel: Omit<ReplacePanel, 'suggestions' | 'loading'>) {
+    setReplacePanel({ ...panel, suggestions: [], loading: true })
     try {
       const res = await fetch('/api/ai/nahrad', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ exerciseName: ex.name, sectionTitle, clientSlug }),
+        body: JSON.stringify({ exerciseName: panel.exName, sectionTitle: panel.sectionTitle, clientSlug }),
       })
       const data = await res.json()
-      if (!res.ok || !data.name) throw new Error(data.error || 'Chyba')
-      updateExercise(sectionId, ex.id, 'name', data.name)
+      if (!res.ok || !data.suggestions) throw new Error(data.error || 'Chyba')
+      setReplacePanel((p) => p ? { ...p, suggestions: data.suggestions, loading: false } : p)
     } catch {
-      setError('Nepodařilo se vygenerovat náhradu cviku')
-    } finally {
-      setReplacingId(null)
+      setError('Nepodařilo se načíst alternativy')
+      setReplacePanel(null)
     }
+  }
+
+  function openReplacePanel(sectionId: string, ex: { id: string; name: string }, sectionTitle: string) {
+    if (!ex.name.trim()) return
+    if (replacePanel?.exId === ex.id) { setReplacePanel(null); return }
+    fetchAlternatives({ sectionId, exId: ex.id, exName: ex.name, sectionTitle })
+  }
+
+  function selectAlternative(sectionId: string, exId: string, name: string) {
+    updateExercise(sectionId, exId, 'name', name)
+    setReplacePanel(null)
   }
 
   async function generateAI() {
@@ -314,14 +332,16 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
                     ▶
                   </button>
                   <button
-                    onClick={() => replaceExercise(section.id, ex, section.title)}
-                    title="Nahradit cvik pomocí AI"
-                    disabled={!ex.name.trim() || replacingId !== null}
-                    className="flex items-center justify-center w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-slate-500 text-xs shrink-0 font-bold"
+                    onClick={() => openReplacePanel(section.id, ex, section.title)}
+                    title="Alternativy pomocí AI"
+                    disabled={!ex.name.trim()}
+                    className={`flex items-center justify-center w-7 h-7 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-xs shrink-0 font-bold ${
+                      replacePanel?.exId === ex.id
+                        ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-500'
+                    }`}
                   >
-                    {replacingId === ex.id ? (
-                      <span className="inline-block w-3 h-3 border border-slate-400 border-t-transparent rounded-full animate-spin" />
-                    ) : '⇄'}
+                    ⇄
                   </button>
                   <button
                     onClick={() => removeExercise(section.id, ex.id)}
@@ -337,6 +357,55 @@ export default function TrainingFormClient({ clientSlug, clientName, initialTrai
               + Add exercise
             </button>
           </div>
+
+          {/* Inline replace panel */}
+          {replacePanel?.sectionId === section.id && (
+            <div className="px-4 pb-4">
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                <div className="flex items-center justify-between mb-2.5">
+                  <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
+                    Alternativy pro „{replacePanel.exName}"
+                  </p>
+                  <div className="flex items-center gap-3">
+                    {!replacePanel.loading && (
+                      <button
+                        onClick={() => fetchAlternatives({ sectionId: replacePanel.sectionId, exId: replacePanel.exId, exName: replacePanel.exName, sectionTitle: replacePanel.sectionTitle })}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        🔄 Dalších 5
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setReplacePanel(null)}
+                      className="text-xs text-slate-400 hover:text-slate-600"
+                    >
+                      Zrušit
+                    </button>
+                  </div>
+                </div>
+
+                {replacePanel.loading ? (
+                  <div className="flex items-center gap-2 py-3 text-sm text-blue-500">
+                    <span className="w-4 h-4 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin shrink-0" />
+                    Hledám alternativy…
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                    {replacePanel.suggestions.map((s, i) => (
+                      <button
+                        key={i}
+                        onClick={() => selectAlternative(section.id, replacePanel.exId, s.name)}
+                        className="text-left bg-white border border-blue-100 hover:border-blue-400 hover:shadow-sm rounded-lg p-2.5 transition-all group"
+                      >
+                        <p className="text-sm font-semibold text-slate-800 group-hover:text-blue-700 leading-tight">{s.name}</p>
+                        {s.reason && <p className="text-xs text-slate-400 mt-1 leading-tight">{s.reason}</p>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
         )
       })}
